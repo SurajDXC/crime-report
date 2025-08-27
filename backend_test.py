@@ -342,6 +342,323 @@ class CrimeReportAPITester:
             self.log_result("Crime Feed Filtering", False, f"Filtering tests failed: {str(e)}")
             return False
     
+    def test_individual_report_retrieval(self):
+        """Test retrieving individual crime report by ID"""
+        if not self.test_report_id:
+            # First create a report to test with
+            if not self.test_crime_report_creation():
+                self.log_result("Individual Report Retrieval", False, "Could not create test report")
+                return False
+        
+        try:
+            response = self.session.get(f"{self.base_url}/crime-reports/{self.test_report_id}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("id") == self.test_report_id:
+                    self.log_result("Individual Report Retrieval", True, "Successfully retrieved report by ID", {
+                        "report_id": data["id"],
+                        "crime_type": data.get("crime_type")
+                    })
+                    return True
+                else:
+                    self.log_result("Individual Report Retrieval", False, "Report ID mismatch", data)
+                    return False
+            else:
+                self.log_result("Individual Report Retrieval", False, f"Report retrieval failed with status {response.status_code}", 
+                              response.text)
+                return False
+        except Exception as e:
+            self.log_result("Individual Report Retrieval", False, f"Report retrieval failed: {str(e)}")
+            return False
+    
+    def test_comments_system(self):
+        """Test adding and retrieving comments on crime reports"""
+        if not self.test_user_token or not self.test_report_id:
+            self.log_result("Comments System", False, "Missing user token or report ID for testing")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.test_user_token}"}
+            
+            # Add a comment
+            comment_data = {
+                "comment_text": "This is a test comment on the crime report. Very concerning incident."
+            }
+            
+            response = self.session.post(f"{self.base_url}/crime-reports/{self.test_report_id}/comments", 
+                                       json=comment_data, headers=headers)
+            
+            if response.status_code == 200:
+                comment_response = response.json()
+                comment_id = comment_response.get("id")
+                
+                # Now retrieve comments to verify
+                response = self.session.get(f"{self.base_url}/crime-reports/{self.test_report_id}/comments")
+                
+                if response.status_code == 200:
+                    comments = response.json()
+                    if isinstance(comments, list) and len(comments) > 0:
+                        # Check if our comment is in the list
+                        found_comment = any(c.get("id") == comment_id for c in comments)
+                        if found_comment:
+                            self.log_result("Comments System", True, "Comment added and retrieved successfully", {
+                                "comment_id": comment_id,
+                                "total_comments": len(comments)
+                            })
+                            return True
+                        else:
+                            self.log_result("Comments System", False, "Added comment not found in retrieval")
+                            return False
+                    else:
+                        self.log_result("Comments System", False, "No comments retrieved after adding")
+                        return False
+                else:
+                    self.log_result("Comments System", False, f"Comment retrieval failed with status {response.status_code}")
+                    return False
+            else:
+                self.log_result("Comments System", False, f"Comment addition failed with status {response.status_code}", 
+                              response.text)
+                return False
+        except Exception as e:
+            self.log_result("Comments System", False, f"Comments system test failed: {str(e)}")
+            return False
+    
+    def test_credibility_rating_system(self):
+        """Test credibility rating system (0-10 scale)"""
+        if not self.test_user_token or not self.test_report_id:
+            self.log_result("Credibility Rating System", False, "Missing user token or report ID for testing")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.test_user_token}"}
+            
+            # Add a credibility rating
+            rating_data = {
+                "rating": 8  # Rating on 0-10 scale
+            }
+            
+            response = self.session.post(f"{self.base_url}/crime-reports/{self.test_report_id}/rating", 
+                                       json=rating_data, headers=headers)
+            
+            if response.status_code == 200:
+                rating_response = response.json()
+                
+                # Now retrieve the user's rating to verify
+                response = self.session.get(f"{self.base_url}/crime-reports/{self.test_report_id}/rating", 
+                                          headers=headers)
+                
+                if response.status_code == 200:
+                    user_rating = response.json()
+                    if user_rating.get("rating") == 8:
+                        self.log_result("Credibility Rating System", True, "Rating added and retrieved successfully", {
+                            "rating": user_rating["rating"],
+                            "message": rating_response.get("message")
+                        })
+                        return True
+                    else:
+                        self.log_result("Credibility Rating System", False, "Rating mismatch", user_rating)
+                        return False
+                else:
+                    self.log_result("Credibility Rating System", False, f"Rating retrieval failed with status {response.status_code}")
+                    return False
+            else:
+                self.log_result("Credibility Rating System", False, f"Rating addition failed with status {response.status_code}", 
+                              response.text)
+                return False
+        except Exception as e:
+            self.log_result("Credibility Rating System", False, f"Credibility rating test failed: {str(e)}")
+            return False
+    
+    def test_admin_crime_types_crud(self):
+        """Test admin CRUD operations for crime types"""
+        if not self.admin_token:
+            self.log_result("Admin Crime Types CRUD", False, "No admin token available for testing")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            
+            # CREATE: Add a new crime type
+            new_crime_type = {
+                "name": "Test Crime Type - Cybercrime"
+            }
+            
+            response = self.session.post(f"{self.base_url}/admin/crime-types", 
+                                       json=new_crime_type, headers=headers)
+            
+            if response.status_code == 200:
+                created_type = response.json()
+                self.test_crime_type_id = created_type.get("id")
+                
+                # READ: Verify it appears in the list
+                response = self.session.get(f"{self.base_url}/crime-types")
+                if response.status_code == 200:
+                    crime_types = response.json()
+                    found_type = any(ct.get("name") == "Test Crime Type - Cybercrime" for ct in crime_types)
+                    
+                    if found_type:
+                        # UPDATE: Modify the crime type
+                        updated_data = {
+                            "name": "Updated Test Crime Type - Advanced Cybercrime"
+                        }
+                        
+                        response = self.session.put(f"{self.base_url}/admin/crime-types/{self.test_crime_type_id}", 
+                                                  json=updated_data, headers=headers)
+                        
+                        if response.status_code == 200:
+                            # DELETE: Remove the crime type
+                            response = self.session.delete(f"{self.base_url}/admin/crime-types/{self.test_crime_type_id}", 
+                                                         headers=headers)
+                            
+                            if response.status_code == 200:
+                                self.log_result("Admin Crime Types CRUD", True, "All CRUD operations successful", {
+                                    "created_id": self.test_crime_type_id,
+                                    "operations": "CREATE, READ, UPDATE, DELETE"
+                                })
+                                return True
+                            else:
+                                self.log_result("Admin Crime Types CRUD", False, f"DELETE failed with status {response.status_code}")
+                                return False
+                        else:
+                            self.log_result("Admin Crime Types CRUD", False, f"UPDATE failed with status {response.status_code}")
+                            return False
+                    else:
+                        self.log_result("Admin Crime Types CRUD", False, "Created crime type not found in list")
+                        return False
+                else:
+                    self.log_result("Admin Crime Types CRUD", False, f"READ operation failed with status {response.status_code}")
+                    return False
+            else:
+                self.log_result("Admin Crime Types CRUD", False, f"CREATE failed with status {response.status_code}", 
+                              response.text)
+                return False
+        except Exception as e:
+            self.log_result("Admin Crime Types CRUD", False, f"Admin CRUD test failed: {str(e)}")
+            return False
+    
+    def test_admin_report_blocking(self):
+        """Test admin blocking and unblocking of crime reports"""
+        if not self.admin_token or not self.test_report_id:
+            self.log_result("Admin Report Blocking", False, "Missing admin token or report ID for testing")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            
+            # BLOCK the report
+            block_data = {
+                "is_blocked": True,
+                "reason": "Test blocking for inappropriate content"
+            }
+            
+            response = self.session.put(f"{self.base_url}/admin/crime-reports/{self.test_report_id}/block", 
+                                      json=block_data, headers=headers)
+            
+            if response.status_code == 200:
+                block_response = response.json()
+                
+                # Verify the report is blocked (should return 404 for regular users)
+                response = self.session.get(f"{self.base_url}/crime-reports/{self.test_report_id}")
+                
+                if response.status_code == 404:
+                    # UNBLOCK the report
+                    unblock_data = {
+                        "is_blocked": False
+                    }
+                    
+                    response = self.session.put(f"{self.base_url}/admin/crime-reports/{self.test_report_id}/block", 
+                                              json=unblock_data, headers=headers)
+                    
+                    if response.status_code == 200:
+                        # Verify the report is accessible again
+                        response = self.session.get(f"{self.base_url}/crime-reports/{self.test_report_id}")
+                        
+                        if response.status_code == 200:
+                            self.log_result("Admin Report Blocking", True, "Block and unblock operations successful", {
+                                "report_id": self.test_report_id,
+                                "operations": "BLOCK, VERIFY_BLOCKED, UNBLOCK, VERIFY_UNBLOCKED"
+                            })
+                            return True
+                        else:
+                            self.log_result("Admin Report Blocking", False, "Report not accessible after unblocking")
+                            return False
+                    else:
+                        self.log_result("Admin Report Blocking", False, f"UNBLOCK failed with status {response.status_code}")
+                        return False
+                else:
+                    self.log_result("Admin Report Blocking", False, "Report still accessible after blocking")
+                    return False
+            else:
+                self.log_result("Admin Report Blocking", False, f"BLOCK failed with status {response.status_code}", 
+                              response.text)
+                return False
+        except Exception as e:
+            self.log_result("Admin Report Blocking", False, f"Admin blocking test failed: {str(e)}")
+            return False
+    
+    def test_admin_view_all_reports(self):
+        """Test admin endpoint to view all reports including blocked ones"""
+        if not self.admin_token:
+            self.log_result("Admin View All Reports", False, "No admin token available for testing")
+            return False
+            
+        try:
+            headers = {"Authorization": f"Bearer {self.admin_token}"}
+            
+            response = self.session.get(f"{self.base_url}/admin/crime-reports", headers=headers)
+            
+            if response.status_code == 200:
+                reports = response.json()
+                if isinstance(reports, list):
+                    self.log_result("Admin View All Reports", True, f"Admin retrieved {len(reports)} reports (including blocked)", {
+                        "total_reports": len(reports)
+                    })
+                    return True
+                else:
+                    self.log_result("Admin View All Reports", False, "Invalid response format", reports)
+                    return False
+            else:
+                self.log_result("Admin View All Reports", False, f"Admin reports view failed with status {response.status_code}", 
+                              response.text)
+                return False
+        except Exception as e:
+            self.log_result("Admin View All Reports", False, f"Admin view all reports test failed: {str(e)}")
+            return False
+    
+    def test_enhanced_report_statistics(self):
+        """Test that reports show enhanced statistics (avg_credibility, total_ratings, comments_count)"""
+        if not self.test_report_id:
+            self.log_result("Enhanced Report Statistics", False, "No test report ID available")
+            return False
+            
+        try:
+            response = self.session.get(f"{self.base_url}/crime-reports/{self.test_report_id}")
+            
+            if response.status_code == 200:
+                report = response.json()
+                
+                # Check if enhanced statistics fields are present
+                required_fields = ["avg_credibility", "total_ratings", "comments_count"]
+                missing_fields = [field for field in required_fields if field not in report]
+                
+                if not missing_fields:
+                    self.log_result("Enhanced Report Statistics", True, "All enhanced statistics fields present", {
+                        "avg_credibility": report.get("avg_credibility"),
+                        "total_ratings": report.get("total_ratings"),
+                        "comments_count": report.get("comments_count")
+                    })
+                    return True
+                else:
+                    self.log_result("Enhanced Report Statistics", False, f"Missing fields: {missing_fields}", report)
+                    return False
+            else:
+                self.log_result("Enhanced Report Statistics", False, f"Report retrieval failed with status {response.status_code}")
+                return False
+        except Exception as e:
+            self.log_result("Enhanced Report Statistics", False, f"Enhanced statistics test failed: {str(e)}")
+            return False
+    
     def run_all_tests(self):
         """Run all backend tests in sequence"""
         print("=" * 60)
