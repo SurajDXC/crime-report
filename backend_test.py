@@ -23,6 +23,8 @@ class CrimeReportAPITester:
         self.admin_token = None
         self.test_user_token = None
         self.test_user_id = None
+        self.test_report_id = None
+        self.test_crime_type_id = None
         self.test_results = []
         
     def log_result(self, test_name, success, message, details=None):
