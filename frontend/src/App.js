@@ -227,14 +227,20 @@ const LoginForm = () => {
 const Navigation = () => {
   const [currentView, setCurrentView] = useState('home');
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   const navItems = [
-    { id: 'home', label: 'Home', icon: '🏠' },
-    { id: 'search', label: 'Search', icon: '🔍' },
-    { id: 'add', label: 'Report', icon: '➕' },
-    ...(user?.is_admin ? [{ id: 'admin', label: 'Admin', icon: '⚙️' }] : []),
-    { id: 'profile', label: 'Profile', icon: '👤' }
+    { id: 'home', label: 'Home', icon: '🏠', path: '/' },
+    { id: 'search', label: 'Search', icon: '🔍', path: '/search' },
+    { id: 'add', label: 'Report', icon: '➕', path: '/add' },
+    ...(user?.is_admin ? [{ id: 'admin', label: 'Admin', icon: '⚙️', path: '/admin' }] : []),
+    { id: 'profile', label: 'Profile', icon: '👤', path: '/profile' }
   ];
+
+  const handleNavigation = (item) => {
+    setCurrentView(item.id);
+    navigate(item.path);
+  };
 
   return (
     <>
@@ -250,20 +256,23 @@ const Navigation = () => {
         </div>
       </header>
       
-      <main className="flex-1 overflow-auto">
-        {currentView === 'home' && <HomeView />}
-        {currentView === 'search' && <SearchView />}
-        {currentView === 'add' && <AddReportView />}
-        {currentView === 'admin' && user?.is_admin && <AdminView />}
-        {currentView === 'profile' && <ProfileView />}
+      <main className="flex-1 overflow-auto pb-20">
+        <Routes>
+          <Route path="/" element={<HomeView />} />
+          <Route path="/search" element={<SearchView />} />
+          <Route path="/add" element={<AddReportView />} />
+          <Route path="/report/:reportId" element={<IndividualReportView />} />
+          {user?.is_admin && <Route path="/admin" element={<AdminView />} />}
+          <Route path="/profile" element={<ProfileView />} />
+        </Routes>
       </main>
 
-      <nav className="bg-white border-t px-4 py-2">
+      <nav className="fixed bottom-0 left-0 right-0 bg-white border-t px-4 py-2 z-50">
         <div className="flex justify-around max-w-md mx-auto">
           {navItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setCurrentView(item.id)}
+              onClick={() => handleNavigation(item)}
               className={`flex flex-col items-center py-2 px-3 rounded-lg ${
                 currentView === item.id
                   ? 'text-blue-600 bg-blue-50'
