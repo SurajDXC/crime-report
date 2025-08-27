@@ -58,6 +58,27 @@ class UserLogin(BaseModel):
     email: str
     password: str
 
+class Comment(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    report_id: str
+    user_id: str
+    user_name: str
+    comment_text: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class CommentCreate(BaseModel):
+    comment_text: str
+
+class CredibilityRating(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    report_id: str
+    user_id: str
+    rating: int = Field(ge=0, le=10)  # 0-10 scale
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class CredibilityRatingCreate(BaseModel):
+    rating: int = Field(ge=0, le=10)
+
 class CrimeReport(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     user_id: str
@@ -71,6 +92,10 @@ class CrimeReport(BaseModel):
     is_anonymous: bool = False
     city: str = "Bhopal"
     image_base64: Optional[str] = None
+    is_blocked: bool = False
+    avg_credibility: float = 0.0
+    total_ratings: int = 0
+    comments_count: int = 0
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 class CrimeReportCreate(BaseModel):
@@ -86,6 +111,16 @@ class CrimeType(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     name: str
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class CrimeTypeCreate(BaseModel):
+    name: str
+
+class CrimeTypeUpdate(BaseModel):
+    name: str
+
+class ReportBlock(BaseModel):
+    is_blocked: bool
+    reason: Optional[str] = None
 
 # Helper functions
 def hash_password(password: str) -> str:
@@ -118,6 +153,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         raise HTTPException(status_code=401, detail="Token expired")
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Invalid token")
+
+async def get_admin_user(current_user: User = Depends(get_current_user)):
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
+    return current_user
 
 def compress_image(image_base64: str, max_size_mb: int = 2) -> str:
     """Compress image to ensure it's under the size limit"""
@@ -152,6 +192,30 @@ def compress_image(image_base64: str, max_size_mb: int = 2) -> str:
         logging.error(f"Image compression error: {e}")
         return image_base64  # Return original if compression fails
 
+async def update_report_stats(report_id: str):
+    """Update report credibility and comment counts"""
+    # Update credibility average
+    ratings = await db.credibility_ratings.find({"report_id": report_id}).to_list(length=None)
+    if ratings:
+        avg_rating = sum(r["rating"] for r in ratings) / len(ratings)
+        total_ratings = len(ratings)
+    else:
+        avg_rating = 0.0
+        total_ratings = 0
+    
+    # Update comment count
+    comments_count = await db.comments.count_documents({"report_id": report_id})
+    
+    # Update the report
+    await db.crime_reports.update_one(
+        {"id": report_id},
+        {"$set": {
+            "avg_credibility": round(avg_rating, 1),
+            "total_ratings": total_ratings,
+            "comments_count": comments_count
+        }}
+    )
+
 # Initialize crime types
 async def init_crime_types():
     existing_types = await db.crime_types.count_documents({})
@@ -178,10 +242,16 @@ async def init_admin():
             is_admin=True
         )
         admin_dict = admin_user.dict()
-        admin_dict["password"] = hash_password("admin123")  # Default admin password
+        admin_dict["password"] = hash_password("Asdf123$")  # Updated admin password
         await db.users.insert_one(admin_dict)
+    else:
+        # Update existing admin password
+        await db.users.update_one(
+            {"is_admin": True},
+            {"$set": {"password": hash_password("Asdf123$")}}
+        )
 
-# Routes
+# Authentication Routes
 @api_router.post("/register")
 async def register_user(user_data: UserCreate):
     # Check if user exists
@@ -229,11 +299,64 @@ async def login_user(login_data: UserLogin):
 async def get_current_user_info(current_user: User = Depends(get_current_user)):
     return current_user
 
+# Crime Types Routes
 @api_router.get("/crime-types", response_model=List[CrimeType])
 async def get_crime_types():
     crime_types = await db.crime_types.find().to_list(1000)
     return [CrimeType(**ct) for ct in crime_types]
 
+# Admin Crime Types Management
+@api_router.post("/admin/crime-types", response_model=CrimeType)
+async def create_crime_type(
+    crime_type_data: CrimeTypeCreate,
+    admin_user: User = Depends(get_admin_user)
+):
+    # Check if crime type already exists
+    existing = await db.crime_types.find_one({"name": crime_type_data.name})
+    if existing:
+        raise HTTPException(status_code=400, detail="Crime type already exists")
+    
+    crime_type = CrimeType(**crime_type_data.dict())
+    await db.crime_types.insert_one(crime_type.dict())
+    
+    return crime_type
+
+@api_router.put("/admin/crime-types/{crime_type_id}", response_model=CrimeType)
+async def update_crime_type(
+    crime_type_id: str,
+    crime_type_data: CrimeTypeUpdate,
+    admin_user: User = Depends(get_admin_user)
+):
+    # Check if crime type exists
+    existing = await db.crime_types.find_one({"id": crime_type_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Crime type not found")
+    
+    # Update crime type
+    await db.crime_types.update_one(
+        {"id": crime_type_id},
+        {"$set": {"name": crime_type_data.name}}
+    )
+    
+    updated_doc = await db.crime_types.find_one({"id": crime_type_id})
+    return CrimeType(**updated_doc)
+
+@api_router.delete("/admin/crime-types/{crime_type_id}")
+async def delete_crime_type(
+    crime_type_id: str,
+    admin_user: User = Depends(get_admin_user)
+):
+    # Check if crime type exists
+    existing = await db.crime_types.find_one({"id": crime_type_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Crime type not found")
+    
+    # Delete crime type
+    await db.crime_types.delete_one({"id": crime_type_id})
+    
+    return {"message": "Crime type deleted successfully"}
+
+# Crime Reports Routes
 @api_router.post("/crime-reports")
 async def create_crime_report(
     crime_data: str = Form(...),
@@ -286,8 +409,8 @@ async def get_crime_reports(
     skip: int = 0,
     limit: int = 20
 ):
-    # Build query
-    query = {"city": city}
+    # Build query - exclude blocked posts for regular users
+    query = {"city": city, "is_blocked": False}
     
     if crime_type:
         query["crime_type"] = crime_type
@@ -311,6 +434,146 @@ async def get_crime_reports(
         .to_list(length=None)
     
     return [CrimeReport(**report) for report in reports]
+
+@api_router.get("/crime-reports/{report_id}", response_model=CrimeReport)
+async def get_crime_report_by_id(report_id: str):
+    report = await db.crime_reports.find_one({"id": report_id})
+    if not report:
+        raise HTTPException(status_code=404, detail="Crime report not found")
+    
+    if report.get("is_blocked", False):
+        raise HTTPException(status_code=404, detail="This report has been blocked")
+    
+    return CrimeReport(**report)
+
+# Admin Report Management
+@api_router.put("/admin/crime-reports/{report_id}/block")
+async def block_crime_report(
+    report_id: str,
+    block_data: ReportBlock,
+    admin_user: User = Depends(get_admin_user)
+):
+    # Check if report exists
+    existing = await db.crime_reports.find_one({"id": report_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Crime report not found")
+    
+    # Update block status
+    await db.crime_reports.update_one(
+        {"id": report_id},
+        {"$set": {"is_blocked": block_data.is_blocked}}
+    )
+    
+    action = "blocked" if block_data.is_blocked else "unblocked"
+    return {"message": f"Crime report {action} successfully"}
+
+@api_router.get("/admin/crime-reports", response_model=List[CrimeReport])
+async def get_all_crime_reports_admin(
+    admin_user: User = Depends(get_admin_user),
+    skip: int = 0,
+    limit: int = 50
+):
+    # Admin can see all reports including blocked ones
+    reports = await db.crime_reports.find({})\
+        .sort("created_at", -1)\
+        .skip(skip)\
+        .limit(limit)\
+        .to_list(length=None)
+    
+    return [CrimeReport(**report) for report in reports]
+
+# Comments Routes
+@api_router.post("/crime-reports/{report_id}/comments", response_model=Comment)
+async def add_comment(
+    report_id: str,
+    comment_data: CommentCreate,
+    current_user: User = Depends(get_current_user)
+):
+    # Check if report exists and not blocked
+    report = await db.crime_reports.find_one({"id": report_id, "is_blocked": False})
+    if not report:
+        raise HTTPException(status_code=404, detail="Crime report not found")
+    
+    comment = Comment(
+        report_id=report_id,
+        user_id=current_user.id,
+        user_name=current_user.name,
+        comment_text=comment_data.comment_text
+    )
+    
+    await db.comments.insert_one(comment.dict())
+    await update_report_stats(report_id)
+    
+    return comment
+
+@api_router.get("/crime-reports/{report_id}/comments", response_model=List[Comment])
+async def get_comments(report_id: str, skip: int = 0, limit: int = 50):
+    # Check if report exists and not blocked
+    report = await db.crime_reports.find_one({"id": report_id, "is_blocked": False})
+    if not report:
+        raise HTTPException(status_code=404, detail="Crime report not found")
+    
+    comments = await db.comments.find({"report_id": report_id})\
+        .sort("created_at", 1)\
+        .skip(skip)\
+        .limit(limit)\
+        .to_list(length=None)
+    
+    return [Comment(**comment) for comment in comments]
+
+# Credibility Rating Routes
+@api_router.post("/crime-reports/{report_id}/rating")
+async def rate_credibility(
+    report_id: str,
+    rating_data: CredibilityRatingCreate,
+    current_user: User = Depends(get_current_user)
+):
+    # Check if report exists and not blocked
+    report = await db.crime_reports.find_one({"id": report_id, "is_blocked": False})
+    if not report:
+        raise HTTPException(status_code=404, detail="Crime report not found")
+    
+    # Check if user already rated this report
+    existing_rating = await db.credibility_ratings.find_one({
+        "report_id": report_id,
+        "user_id": current_user.id
+    })
+    
+    if existing_rating:
+        # Update existing rating
+        await db.credibility_ratings.update_one(
+            {"report_id": report_id, "user_id": current_user.id},
+            {"$set": {"rating": rating_data.rating}}
+        )
+        message = "Rating updated successfully"
+    else:
+        # Create new rating
+        rating = CredibilityRating(
+            report_id=report_id,
+            user_id=current_user.id,
+            rating=rating_data.rating
+        )
+        await db.credibility_ratings.insert_one(rating.dict())
+        message = "Rating added successfully"
+    
+    await update_report_stats(report_id)
+    
+    return {"message": message}
+
+@api_router.get("/crime-reports/{report_id}/rating")
+async def get_user_rating(
+    report_id: str,
+    current_user: User = Depends(get_current_user)
+):
+    rating = await db.credibility_ratings.find_one({
+        "report_id": report_id,
+        "user_id": current_user.id
+    })
+    
+    if rating:
+        return {"rating": rating["rating"]}
+    else:
+        return {"rating": None}
 
 @api_router.get("/")
 async def root():
