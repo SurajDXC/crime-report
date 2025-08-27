@@ -14,7 +14,7 @@ import time
 # Configuration
 BASE_URL = "https://crimereport-1.preview.emergentagent.com/api"
 ADMIN_EMAIL = "admin@crimereport.com"
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = "Asdf123$"
 
 class CrimeReportAPITester:
     def __init__(self):
