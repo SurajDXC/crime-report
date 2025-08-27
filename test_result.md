@@ -330,10 +330,12 @@ metadata:
 
 test_plan:
   current_focus:
-    - "User Authentication System"
-    - "Crime Types Management" 
-    - "Crime Reporting System"
-    - "Crime Feed API"
+    - "Comments System"
+    - "Credibility Rating System"
+    - "Admin Crime Types Management"
+    - "Admin Report Management"
+    - "Enhanced Report Statistics"
+    - "Individual Report Sharing"
   stuck_tasks: []
   test_all: false
   test_priority: "high_first"
