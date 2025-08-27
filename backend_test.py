@@ -678,7 +678,14 @@ class CrimeReportAPITester:
             ("Crime Report Creation", self.test_crime_report_creation),
             ("Anonymous Crime Report", self.test_anonymous_crime_report),
             ("Crime Feed Basic", self.test_crime_feed_basic),
-            ("Crime Feed Filtering", self.test_crime_feed_filtering)
+            ("Crime Feed Filtering", self.test_crime_feed_filtering),
+            ("Individual Report Retrieval", self.test_individual_report_retrieval),
+            ("Enhanced Report Statistics", self.test_enhanced_report_statistics),
+            ("Comments System", self.test_comments_system),
+            ("Credibility Rating System", self.test_credibility_rating_system),
+            ("Admin Crime Types CRUD", self.test_admin_crime_types_crud),
+            ("Admin Report Blocking", self.test_admin_report_blocking),
+            ("Admin View All Reports", self.test_admin_view_all_reports)
         ]
         
         passed = 0
