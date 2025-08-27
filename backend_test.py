@@ -209,6 +209,7 @@ class CrimeReportAPITester:
             if response.status_code == 200:
                 data = response.json()
                 if "report" in data and "message" in data:
+                    self.test_report_id = data["report"]["id"]  # Store for later tests
                     self.log_result("Crime Report Creation", True, "Crime report created successfully", {
                         "report_id": data["report"]["id"],
                         "crime_type": data["report"]["crime_type"],
