@@ -12,7 +12,7 @@ from datetime import datetime, timezone
 import time
 
 # Configuration
-BASE_URL = "https://crimereport-1.preview.emergentagent.com/api"
+BASE_URL = "http://127.0.0.1:8000/api"
 ADMIN_EMAIL = "admin@crimereport.com"
 ADMIN_PASSWORD = "Asdf123$"
 

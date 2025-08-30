@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 import jwt
 import bcrypt
 import base64
+from models import *
 from PIL import Image
 import io
 
@@ -37,90 +38,8 @@ api_router = APIRouter(prefix="/api")
 # Security
 security = HTTPBearer()
 
-# Models
-class User(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    email: str
-    phone: Optional[str] = None
-    city: str = "Bhopal"
-    is_admin: bool = False
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class UserCreate(BaseModel):
-    name: str
-    email: str
-    password: str
-    phone: Optional[str] = None
-    city: str = "Bhopal"
-
-class UserLogin(BaseModel):
-    email: str
-    password: str
-
-class Comment(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    report_id: str
-    user_id: str
-    user_name: str
-    comment_text: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class CommentCreate(BaseModel):
-    comment_text: str
-
-class CredibilityRating(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    report_id: str
-    user_id: str
-    rating: int = Field(ge=0, le=10)  # 0-10 scale
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class CredibilityRatingCreate(BaseModel):
-    rating: int = Field(ge=0, le=10)
-
-class CrimeReport(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    user_id: str
-    user_name: str
-    crime_type: str
-    location: str
-    landmark: Optional[str] = None
-    crime_time: datetime
-    criminal_name: Optional[str] = None
-    crime_details: str
-    is_anonymous: bool = False
-    city: str = "Bhopal"
-    image_base64: Optional[str] = None
-    is_blocked: bool = False
-    avg_credibility: float = 0.0
-    total_ratings: int = 0
-    comments_count: int = 0
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class CrimeReportCreate(BaseModel):
-    crime_type: str
-    location: str
-    landmark: Optional[str] = None
-    crime_time: datetime
-    criminal_name: Optional[str] = None
-    crime_details: str
-    is_anonymous: bool = False
-
-class CrimeType(BaseModel):
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    name: str
-    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
-
-class CrimeTypeCreate(BaseModel):
-    name: str
-
-class CrimeTypeUpdate(BaseModel):
-    name: str
-
-class ReportBlock(BaseModel):
-    is_blocked: bool
-    reason: Optional[str] = None
+#     is_blocked: bool
+#     reason: Optional[str] = None
 
 # Helper functions
 def hash_password(password: str) -> str:
@@ -159,38 +78,45 @@ async def get_admin_user(current_user: User = Depends(get_current_user)):
         raise HTTPException(status_code=403, detail="Admin access required")
     return current_user
 
-def compress_image(image_base64: str, max_size_mb: int = 2) -> str:
-    """Compress image to ensure it's under the size limit"""
+def compress_image(image_base64: str, target_size_kb: int = 80, max_width: int = 1024, max_height: int = 1024) -> str:
     try:
         # Decode base64
         image_data = base64.b64decode(image_base64)
         img = Image.open(io.BytesIO(image_data))
-        
-        # Convert to RGB if necessary
+
+        # Convert to RGB if PNG/transparent
         if img.mode in ('RGBA', 'P'):
             img = img.convert('RGB')
-        
-        # Start with high quality
+
+        # Step 1: Resize if larger than max dimensions
+        img.thumbnail((max_width, max_height))  # maintains aspect ratio
+
+        # Step 2: Compress iteratively
         quality = 85
         output = io.BytesIO()
-        
-        while quality > 10:
+
+        while True:
             output.seek(0)
             output.truncate()
-            img.save(output, format='JPEG', quality=quality)
-            
-            # Check size
-            size_mb = len(output.getvalue()) / (1024 * 1024)
-            if size_mb <= max_size_mb:
+            img.save(output, format="JPEG", quality=quality)
+
+            size_kb = len(output.getvalue()) / 1024
+            if size_kb <= target_size_kb or quality <= 10:
                 break
-            quality -= 10
-        
+
+            quality -= 5  # lower quality gradually
+
+            # Extra safety: also scale down image if still too big
+            if size_kb > target_size_kb * 2:  # way too big
+                img = img.resize((img.width // 2, img.height // 2))
+
         # Encode back to base64
-        compressed_base64 = base64.b64encode(output.getvalue()).decode('utf-8')
+        compressed_base64 = base64.b64encode(output.getvalue()).decode("utf-8")
         return compressed_base64
+
     except Exception as e:
         logging.error(f"Image compression error: {e}")
-        return image_base64  # Return original if compression fails
+        return image_base64
 
 async def update_report_stats(report_id: str):
     """Update report credibility and comment counts"""

@@ -1,89 +1,15 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
-import { BrowserRouter, Routes, Route, useParams, useNavigate } from 'react-router-dom';
+import { Routes, Route, useNavigate , Navigate, useLocation} from "react-router-dom";
 import './App.css';
 import axios from 'axios';
+import ReportShareDetailsView from './pages/ReportShareDetailsView';
+import SearchView from './pages/SearchView';
+import AddReportView from './pages/AddReportView';
+import { AuthProvider, useAuth } from "./auth"; 
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
 
-// Auth Context
-const AuthContext = createContext();
-
-const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (token) {
-      getCurrentUser();
-    } else {
-      setLoading(false);
-    }
-  }, [token]);
-
-  const getCurrentUser = async () => {
-    try {
-      const response = await axios.get(`${API}/me`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setUser(response.data);
-    } catch (error) {
-      console.error('Failed to get user:', error);
-      logout();
-    }
-    setLoading(false);
-  };
-
-  const login = async (email, password) => {
-    const response = await axios.post(`${API}/login`, { email, password });
-    const { token: newToken, user: userData } = response.data;
-    
-    setToken(newToken);
-    setUser(userData);
-    localStorage.setItem('token', newToken);
-    
-    return response.data;
-  };
-
-  const register = async (userData) => {
-    const response = await axios.post(`${API}/register`, userData);
-    const { token: newToken, user: newUser } = response.data;
-    
-    setToken(newToken);
-    setUser(newUser);
-    localStorage.setItem('token', newToken);
-    
-    return response.data;
-  };
-
-  const logout = () => {
-    setToken(null);
-    setUser(null);
-    localStorage.removeItem('token');
-  };
-
-  return (
-    <AuthContext.Provider value={{
-      user,
-      token,
-      loading,
-      login,
-      register,
-      logout
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
-};
-
-const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within AuthProvider');
-  }
-  return context;
-};
 
 // Components
 const LoadingSpinner = () => (
@@ -104,15 +30,18 @@ const LoginForm = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const { login, register } = useAuth();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
     setError('');
+    
 
     try {
       if (isLogin) {
         await login(formData.email, formData.password);
+        
       } else {
         await register(formData);
       }
@@ -120,6 +49,7 @@ const LoginForm = () => {
       setError(error.response?.data?.detail || 'An error occurred');
     }
     setLoading(false);
+    navigate('/');
   };
 
   const handleInputChange = (e) => {
@@ -244,7 +174,7 @@ const Navigation = () => {
 
   return (
     <>
-      <header className="bg-white shadow-sm border-b px-4 py-3">
+      <header className="bg-white shadow-sm border-b px-4 py-3 fixed top-0 left-0 right-0">
         <div className="flex justify-between items-center max-w-6xl mx-auto">
           <h1 className="text-xl font-bold text-gray-900">CrimeReport - Bhopal</h1>
           <button
@@ -256,12 +186,12 @@ const Navigation = () => {
         </div>
       </header>
       
-      <main className="flex-1 overflow-auto pb-20">
+      <main className="flex-1 overflow-auto pb-20 pt-11">
         <Routes>
           <Route path="/" element={<HomeView />} />
           <Route path="/search" element={<SearchView />} />
           <Route path="/add" element={<AddReportView />} />
-          <Route path="/report/:reportId" element={<IndividualReportView />} />
+          <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
           {user?.is_admin && <Route path="/admin" element={<AdminView />} />}
           <Route path="/profile" element={<ProfileView />} />
         </Routes>
@@ -289,7 +219,7 @@ const Navigation = () => {
   );
 };
 
-const ReportCard = ({ report, onViewDetails, token }) => {
+export const  ReportCard = ({ report, onViewDetails, token }) => {
   const [userRating, setUserRating] = useState(null);
   const [showComments, setShowComments] = useState(false);
   const [comments, setComments] = useState([]);
@@ -606,7 +536,7 @@ const HomeView = () => {
   );
 };
 
-const ReportDetailsView = ({ report, onBack, token }) => {
+export const ReportDetailsView = ({ report, onBack, token }) => {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [userRating, setUserRating] = useState(null);
@@ -839,351 +769,9 @@ const ReportDetailsView = ({ report, onBack, token }) => {
   );
 };
 
-const SearchView = () => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState({
-    crime_type: '',
-    location: ''
-  });
-  const [crimeTypes, setCrimeTypes] = useState([]);
-  const [reports, setReports] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [selectedReport, setSelectedReport] = useState(null);
-  const { token } = useAuth();
 
-  useEffect(() => {
-    fetchCrimeTypes();
-  }, []);
 
-  const fetchCrimeTypes = async () => {
-    try {
-      const response = await axios.get(`${API}/crime-types`);
-      setCrimeTypes(response.data);
-    } catch (error) {
-      console.error('Failed to fetch crime types:', error);
-    }
-  };
 
-  const handleSearch = async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({
-        city: 'Bhopal',
-        ...(searchQuery && { search: searchQuery }),
-        ...(filters.crime_type && { crime_type: filters.crime_type }),
-        ...(filters.location && { location: filters.location })
-      });
-
-      const response = await axios.get(`${API}/crime-reports?${params}`);
-      setReports(response.data);
-    } catch (error) {
-      console.error('Search failed:', error);
-    }
-    setLoading(false);
-  };
-
-  const handleViewDetails = (report) => {
-    setSelectedReport(report);
-  };
-
-  if (selectedReport) {
-    return (
-      <ReportDetailsView 
-        report={selectedReport} 
-        onBack={() => setSelectedReport(null)}
-        token={token}
-      />
-    );
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-4">Search Reports</h2>
-        
-        <div className="space-y-4">
-          <input
-            type="text"
-            placeholder="Search by keywords, location, or criminal name..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          
-          <div className="grid grid-cols-2 gap-4">
-            <select
-              value={filters.crime_type}
-              onChange={(e) => setFilters({...filters, crime_type: e.target.value})}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">All Crime Types</option>
-              {crimeTypes.map((type) => (
-                <option key={type.id} value={type.name}>{type.name}</option>
-              ))}
-            </select>
-            
-            <input
-              type="text"
-              placeholder="Filter by location"
-              value={filters.location}
-              onChange={(e) => setFilters({...filters, location: e.target.value})}
-              className="px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
-          </div>
-          
-          <button
-            onClick={handleSearch}
-            disabled={loading}
-            className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 disabled:opacity-50 font-medium"
-          >
-            {loading ? 'Searching...' : 'Search Reports'}
-          </button>
-        </div>
-      </div>
-
-      <div className="space-y-4">
-        {reports.map((report) => (
-          <ReportCard 
-            key={report.id} 
-            report={report} 
-            onViewDetails={handleViewDetails}
-            token={token}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const AddReportView = () => {
-  const [formData, setFormData] = useState({
-    crime_type: '',
-    location: '',
-    landmark: '',
-    crime_time: '',
-    criminal_name: '',
-    crime_details: '',
-    is_anonymous: false
-  });
-  const [crimeTypes, setCrimeTypes] = useState([]);
-  const [image, setImage] = useState(null);
-  const [loading, setLoading] = useState(false);
-  const [success, setSuccess] = useState(false);
-  const { token } = useAuth();
-
-  useEffect(() => {
-    fetchCrimeTypes();
-  }, []);
-
-  const fetchCrimeTypes = async () => {
-    try {
-      const response = await axios.get(`${API}/crime-types`);
-      setCrimeTypes(response.data);
-    } catch (error) {
-      console.error('Failed to fetch crime types:', error);
-    }
-  };
-
-  const handleInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
-      [name]: type === 'checkbox' ? checked : value
-    });
-  };
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file && file.size > 2 * 1024 * 1024) {
-      alert('Image size must be less than 2MB');
-      return;
-    }
-    setImage(file);
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const formDataObj = new FormData();
-      formDataObj.append('crime_data', JSON.stringify(formData));
-      if (image) {
-        formDataObj.append('image', image);
-      }
-
-      await axios.post(`${API}/crime-reports`, formDataObj, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data'
-        }
-      });
-
-      setSuccess(true);
-      setFormData({
-        crime_type: '',
-        location: '',
-        landmark: '',
-        crime_time: '',
-        criminal_name: '',
-        crime_details: '',
-        is_anonymous: false
-      });
-      setImage(null);
-      
-      setTimeout(() => setSuccess(false), 3000);
-    } catch (error) {
-      console.error('Failed to submit report:', error);
-      alert('Failed to submit report. Please try again.');
-    }
-    setLoading(false);
-  };
-
-  if (success) {
-    return (
-      <div className="max-w-2xl mx-auto px-4 py-12 text-center">
-        <div className="text-green-500 text-6xl mb-4">✅</div>
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Report Submitted</h2>
-        <p className="text-gray-600">Your crime report has been submitted successfully.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Report a Crime</h2>
-        <p className="text-gray-600">Help make your community safer</p>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Crime Type *
-          </label>
-          <select
-            name="crime_type"
-            value={formData.crime_type}
-            onChange={handleInputChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-          >
-            <option value="">Select crime type</option>
-            {crimeTypes.map((type) => (
-              <option key={type.id} value={type.name}>{type.name}</option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Location *
-          </label>
-          <input
-            type="text"
-            name="location"
-            value={formData.location}
-            onChange={handleInputChange}
-            placeholder="Enter location (e.g., Street name, area)"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Nearby Landmark
-          </label>
-          <input
-            type="text"
-            name="landmark"
-            value={formData.landmark}
-            onChange={handleInputChange}
-            placeholder="Any nearby landmark (optional)"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Incident Date & Time *
-          </label>
-          <input
-            type="datetime-local"
-            name="crime_time"
-            value={formData.crime_time}
-            onChange={handleInputChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Suspect/Criminal Name
-          </label>
-          <input
-            type="text"
-            name="criminal_name"
-            value={formData.criminal_name}
-            onChange={handleInputChange}
-            placeholder="If known (optional)"
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Crime Details *
-          </label>
-          <textarea
-            name="crime_details"
-            value={formData.crime_details}
-            onChange={handleInputChange}
-            placeholder="Describe what happened in detail..."
-            rows={4}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            required
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Upload Evidence (Image)
-          </label>
-          <input
-            type="file"
-            accept="image/*"
-            onChange={handleImageChange}
-            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          />
-          <p className="text-sm text-gray-500 mt-1">Maximum size: 2MB</p>
-        </div>
-
-        <div className="flex items-center">
-          <input
-            type="checkbox"
-            name="is_anonymous"
-            checked={formData.is_anonymous}
-            onChange={handleInputChange}
-            className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-          />
-          <label className="ml-2 block text-sm text-gray-700">
-            Submit anonymously
-          </label>
-        </div>
-
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-red-600 text-white py-3 px-4 rounded-lg hover:bg-red-700 disabled:opacity-50 font-medium"
-        >
-          {loading ? 'Submitting...' : 'Submit Report'}
-        </button>
-      </form>
-    </div>
-  );
-};
 
 const AdminView = () => {
   const [activeTab, setActiveTab] = useState('crime-types');
@@ -1479,7 +1067,7 @@ const ProfileView = () => {
           
           <div>
             <label className="block text-sm font-medium text-gray-700">City</label>
-            <p className="text-gray-900">{user?.city}</p>
+            <p className="text-gray-900">{user?.city || 'Not provided'}</p>
           </div>
           
           <div>
@@ -1503,12 +1091,29 @@ const ProfileView = () => {
 
 const MainApp = () => {
   const { user, loading } = useAuth();
+  const location = useLocation();
 
   if (loading) return <LoadingSpinner />;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      {user ? <Navigation /> : <LoginForm />}
+      <Routes>
+        {/* Public route */}
+        <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
+
+        {/* Auth routes */}
+        {user ? (
+          <Route path="/*" element={<Navigation />} />
+        ) : (
+          <>
+            {/* Allow /login explicitly */}
+            <Route path="/login" element={<LoginForm />} />
+
+            {/* Redirect everything else to login */}
+            <Route path="*" element={<Navigate to="/login" state={{ from: location }} />} />
+          </>
+        )}
+      </Routes>
     </div>
   );
 };
