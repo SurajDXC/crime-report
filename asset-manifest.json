@@ -1,10 +1,10 @@
 {
   "files": {
-    "main.css": "/crime-report/frontend/static/css/main.57ea9ee5.css",
-    "main.js": "/crime-report/frontend/static/js/main.156acd1c.js",
-    "index.html": "/crime-report/frontend/index.html",
-    "main.57ea9ee5.css.map": "/crime-report/frontend/static/css/main.57ea9ee5.css.map",
-    "main.156acd1c.js.map": "/crime-report/frontend/static/js/main.156acd1c.js.map"
+    "main.css": "/crime-report/static/css/main.57ea9ee5.css",
+    "main.js": "/crime-report/static/js/main.156acd1c.js",
+    "index.html": "/crime-report/index.html",
+    "main.57ea9ee5.css.map": "/crime-report/static/css/main.57ea9ee5.css.map",
+    "main.156acd1c.js.map": "/crime-report/static/js/main.156acd1c.js.map"
   },
   "entrypoints": [
     "static/css/main.57ea9ee5.css",
