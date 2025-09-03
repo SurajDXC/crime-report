@@ -1,13 +1,13 @@
 {
   "files": {
     "main.css": "/crime-report/static/css/main.57ea9ee5.css",
-    "main.js": "/crime-report/static/js/main.6e1b2980.js",
+    "main.js": "/crime-report/static/js/main.91687adb.js",
     "index.html": "/crime-report/index.html",
     "main.57ea9ee5.css.map": "/crime-report/static/css/main.57ea9ee5.css.map",
-    "main.6e1b2980.js.map": "/crime-report/static/js/main.6e1b2980.js.map"
+    "main.91687adb.js.map": "/crime-report/static/js/main.91687adb.js.map"
   },
   "entrypoints": [
     "static/css/main.57ea9ee5.css",
-    "static/js/main.6e1b2980.js"
+    "static/js/main.91687adb.js"
   ]
 }
