@@ -66,6 +66,9 @@ const LoginForm = () => {
           <h1 className="text-3xl font-bold text-gray-900 mb-2">CrimeReport</h1>
           <p className="text-gray-600">Making cities safer together</p>
         </div>
+        <Routes>
+          <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
+        </Routes>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
@@ -194,6 +197,7 @@ const Navigation = () => {
           <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
           {user?.is_admin && <Route path="/admin" element={<AdminView />} />}
           <Route path="/profile" element={<ProfileView />} />
+          <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
         </Routes>
       </main>
 
@@ -1091,14 +1095,15 @@ const ProfileView = () => {
 
 const MainApp = () => {
   const { user, loading } = useAuth();
-  const location = useLocation();
+  
 
   if (loading) return <LoadingSpinner />;
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
+          
           {user ? <Navigation /> : <LoginForm />}
-           <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
+
     </div>
   );
 };
