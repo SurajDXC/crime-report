@@ -1097,20 +1097,8 @@ const MainApp = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <Routes>
-        {/* Public route */}
-        <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
-
-        {/* Auth routes */}
-        {user ? (
-          <Route path="/*" element={<Navigation />} />
-        ) : (
-          <>
-            <Route path="/login" element={<LoginForm />} />
-            <Route path="*" element={<NotFound />} />   {/* ✅ No redirect, just show NotFound */}
-          </>
-        )}
-      </Routes>
+          {user ? <Navigation /> : <LoginForm />}
+           <Route path="/report/:reportId" element={<ReportShareDetailsView />} />
     </div>
   );
 };
